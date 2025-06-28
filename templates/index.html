@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartDoc Formatter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>SmartDoc Formatter</h1>
+        <div class="upload-section">
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="file-input">
+                    <input type="file" id="document" name="file" accept=".doc,.docx,.txt,.pdf">
+                    <label for="document" class="file-label">Choose a file</label>
+                </div>
+                <button type="submit" class="upload-btn">Upload & Format</button>
+            </form>
+        </div>
+        <div id="status" class="status-message"></div>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 

@@ -5,12 +5,13 @@ import uuid
 from datetime import datetime
 
 from services.document_processor import DocumentProcessor
-from services.word_handler import WordHandler
+
+from services.word_handler import DocumentHandler
 from utils.helpers import allowed_file, get_file_path
 
 document_bp = Blueprint('document', __name__)
 processor = DocumentProcessor()
-word_handler = WordHandler()
+word_handler = DocumentHandler()
 
 @document_bp.route('/', methods=['GET'])
 def index():
@@ -31,7 +32,7 @@ def upload_document():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    if not allowed_file(file.filename):
+    if not allowed_file(file.filename, current_app):
         return jsonify({'error': 'Invalid file type. Only .docx files are allowed'}), 400
 
     try:
@@ -39,7 +40,7 @@ def upload_document():
         file_id = str(uuid.uuid4())
         original_filename = secure_filename(file.filename)
         filename = f"{file_id}_{original_filename}"
-        filepath = get_file_path(filename)
+        filepath = get_file_path(filename, current_app)
 
         # Save the file
         file.save(filepath)
@@ -82,7 +83,7 @@ def process_document():
         return jsonify({'error': 'File not found'}), 404
 
     try:
-        filepath = get_file_path(file_info['filename'])
+        filepath = get_file_path(file_info['filename'], current_app)
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found on server'}), 404
 
@@ -115,7 +116,7 @@ def download_document(file_id):
         return jsonify({'error': 'File not found'}), 404
 
     try:
-        filepath = get_file_path(file_info['filename'])
+        filepath = get_file_path(file_info['filename'], current_app)
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found on server'}), 404
 

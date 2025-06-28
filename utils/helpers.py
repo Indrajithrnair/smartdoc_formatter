@@ -1,13 +1,13 @@
 import os
 from werkzeug.utils import secure_filename
-from flask import current_app
+from flask import Flask
 
-def allowed_file(filename):
+def allowed_file(filename, app: Flask):
     """
     Check if the uploaded file has an allowed extension
     """
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def get_safe_filename(filename):
     """
@@ -15,24 +15,24 @@ def get_safe_filename(filename):
     """
     return secure_filename(filename)
 
-def ensure_upload_folder():
+def ensure_upload_folder(app: Flask):
     """
     Ensure the upload folder exists
     """
-    os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-def get_file_path(filename):
+def get_file_path(filename, app: Flask):
     """
     Get the full path for a file in the upload folder
     """
-    return os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+    return os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
-def cleanup_old_files():
+def cleanup_old_files(app: Flask):
     """
     Clean up old temporary files from the upload folder
     """
     try:
-        folder = current_app.config['UPLOAD_FOLDER']
+        folder = app.config['UPLOAD_FOLDER']
         for filename in os.listdir(folder):
             file_path = os.path.join(folder, filename)
             try:

@@ -29,7 +29,7 @@ def preview_document(file_id):
         return jsonify({'error': 'File not found'}), 404
 
     try:
-        filepath = get_file_path(file_info['filename'])
+        filepath = get_file_path(file_info['filename'], current_app)
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found on server'}), 404
 

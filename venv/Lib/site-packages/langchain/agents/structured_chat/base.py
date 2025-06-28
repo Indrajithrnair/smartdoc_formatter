@@ -1,5 +1,6 @@
 import re
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
+from typing import Any, Optional, Union
 
 from langchain_core._api import deprecated
 from langchain_core.agents import AgentAction
@@ -11,9 +12,10 @@ from langchain_core.prompts.chat import (
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
-from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.tools import BaseTool
+from langchain_core.tools.render import ToolsRenderer
+from pydantic import Field
 
 from langchain.agents.agent import Agent, AgentOutputParser
 from langchain.agents.format_scratchpad import format_log_to_str
@@ -23,12 +25,12 @@ from langchain.agents.structured_chat.output_parser import (
 )
 from langchain.agents.structured_chat.prompt import FORMAT_INSTRUCTIONS, PREFIX, SUFFIX
 from langchain.chains.llm import LLMChain
-from langchain.tools.render import ToolsRenderer, render_text_description_and_args
+from langchain.tools.render import render_text_description_and_args
 
 HUMAN_MESSAGE_TEMPLATE = "{input}\n\n{agent_scratchpad}"
 
 
-@deprecated("0.1.0", alternative="create_structured_chat_agent", removal="0.3.0")
+@deprecated("0.1.0", alternative="create_structured_chat_agent", removal="1.0")
 class StructuredChatAgent(Agent):
     """Structured Chat Agent."""
 
@@ -48,7 +50,7 @@ class StructuredChatAgent(Agent):
         return "Thought:"
 
     def _construct_scratchpad(
-        self, intermediate_steps: List[Tuple[AgentAction, str]]
+        self, intermediate_steps: list[tuple[AgentAction, str]]
     ) -> str:
         agent_scratchpad = super()._construct_scratchpad(intermediate_steps)
         if not isinstance(agent_scratchpad, str):
@@ -73,7 +75,7 @@ class StructuredChatAgent(Agent):
         return StructuredChatOutputParserWithRetries.from_llm(llm=llm)
 
     @property
-    def _stop(self) -> List[str]:
+    def _stop(self) -> list[str]:
         return ["Observation:"]
 
     @classmethod
@@ -84,8 +86,8 @@ class StructuredChatAgent(Agent):
         suffix: str = SUFFIX,
         human_message_template: str = HUMAN_MESSAGE_TEMPLATE,
         format_instructions: str = FORMAT_INSTRUCTIONS,
-        input_variables: Optional[List[str]] = None,
-        memory_prompts: Optional[List[BasePromptTemplate]] = None,
+        input_variables: Optional[list[str]] = None,
+        memory_prompts: Optional[list[BasePromptTemplate]] = None,
     ) -> BasePromptTemplate:
         tool_strings = []
         for tool in tools:
@@ -116,8 +118,8 @@ class StructuredChatAgent(Agent):
         suffix: str = SUFFIX,
         human_message_template: str = HUMAN_MESSAGE_TEMPLATE,
         format_instructions: str = FORMAT_INSTRUCTIONS,
-        input_variables: Optional[List[str]] = None,
-        memory_prompts: Optional[List[BasePromptTemplate]] = None,
+        input_variables: Optional[list[str]] = None,
+        memory_prompts: Optional[list[BasePromptTemplate]] = None,
         **kwargs: Any,
     ) -> Agent:
         """Construct an agent from an LLM and tools."""
@@ -156,7 +158,7 @@ def create_structured_chat_agent(
     prompt: ChatPromptTemplate,
     tools_renderer: ToolsRenderer = render_text_description_and_args,
     *,
-    stop_sequence: Union[bool, List[str]] = True,
+    stop_sequence: Union[bool, list[str]] = True,
 ) -> Runnable:
     """Create an agent aimed at supporting tools with multiple inputs.
 

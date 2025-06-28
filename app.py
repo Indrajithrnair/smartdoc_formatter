@@ -1,9 +1,12 @@
-from flask import Flask, jsonify, session
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+from flask import Flask, jsonify, session, render_template
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 import logging
 from logging.handlers import RotatingFileHandler
-import os
 from datetime import timedelta
 
 from config import Config
@@ -44,8 +47,34 @@ def create_app(config_class=Config):
     app.register_blueprint(document_bp, url_prefix='/api')
     app.register_blueprint(preview_bp, url_prefix='/api')
 
-    # Ensure upload directory exists
-    ensure_upload_folder()
+    # Ensure upload directory exists and clean old files
+    with app.app_context():
+        ensure_upload_folder(app)
+        cleanup_old_files(app)
+
+    @app.route('/')
+    def index():
+        """Serve the main application interface."""
+        return render_template('index.html')
+
+    @app.route('/<path:path>')
+    def catch_all(path):
+        """Handle undefined routes."""
+        return jsonify({
+            "error": {
+                "code": 404,
+                "name": "Not Found",
+                "description": f"The requested URL /{path} was not found on the server.",
+                "available_endpoints": {
+                    "root": "/",
+                    "document": "/api/",
+                    "upload": "/api/upload",
+                    "process": "/api/process",
+                    "download": "/api/download/<file_id>",
+                    "preview": "/api/preview/<file_id>"
+                }
+            }
+        }), 404
 
     @app.before_request
     def before_request():
@@ -85,11 +114,6 @@ def create_app(config_class=Config):
             }
         }
         return jsonify(response), 500
-
-    # Cleanup old files periodically (you might want to move this to a proper task scheduler)
-    @app.before_first_request
-    def initialize():
-        cleanup_old_files()
 
     return app
 

@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime
 
 from services.document_processor import DocumentProcessor
-
 from services.word_handler import DocumentHandler
 from utils.helpers import allowed_file, get_file_path
 
@@ -51,7 +50,8 @@ def upload_document():
             'original_name': original_filename,
             'filename': filename,
             'uploaded_at': datetime.utcnow().isoformat(),
-            'status': 'uploaded'
+            'status': 'uploaded',
+            'processed_filename': None
         }
         session['files'].append(file_info)
         session.modified = True
@@ -88,19 +88,24 @@ def process_document():
             return jsonify({'error': 'File not found on server'}), 404
 
         # Process the document
-        result = processor.process_document(filepath)
+        result = processor.process_document(filepath, instructions)
         if result['status'] == 'error':
             raise Exception(result['message'])
 
-        # Update file status
+        # Get the processed file path
+        processed_filename = os.path.basename(result['output_path'])
+        
+        # Update file info in session
         file_info['status'] = 'processed'
         file_info['processed_at'] = datetime.utcnow().isoformat()
+        file_info['processed_filename'] = processed_filename
         session.modified = True
 
         return jsonify({
             'message': 'Document processed successfully',
             'file_id': file_id,
-            'status': 'processed'
+            'status': 'processed',
+            'changes': result.get('agent_response', 'Document formatting applied successfully.')
         }), 200
 
     except Exception as e:
@@ -116,7 +121,10 @@ def download_document(file_id):
         return jsonify({'error': 'File not found'}), 404
 
     try:
-        filepath = get_file_path(file_info['filename'], current_app)
+        # Use processed file if available, otherwise use original
+        filename = file_info.get('processed_filename') or file_info['filename']
+        filepath = get_file_path(filename, current_app)
+        
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found on server'}), 404
 

@@ -8,13 +8,15 @@ import time
 from datetime import datetime
 
 from langchain_groq import ChatGroq
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain.agents import AgentExecutor, create_openai_functions_agent, create_structured_chat_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import Tool
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_community.document_loaders import TextLoader
 from langchain.memory import ConversationBufferMemory
 from langchain_core.runnables import RunnablePassthrough
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches, Cm
@@ -22,6 +24,7 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_LINE_SPACING
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from docx.table import _Cell, _Row, _Column, Table
+from docx.oxml import parse_xml
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -197,8 +200,8 @@ class DocumentAgent:
         self.api_key = os.getenv("GROQ_API_KEY")
         
         # Initialize primary and secondary LLMs
-        self.primary_llm = self._init_llm("llama3-70b-8192", 0.1, 4096)
-        self.secondary_llm = self._init_llm("llama3-8b-8192", 0.1, 2048)
+        self.primary_llm = self._init_llm("llama-3.1-8b-instant", 0.1, 4096)
+        self.secondary_llm = self._init_llm("llama-3.1-8b-instant", 0.1, 2048)
         
         # Initialize tools
         self.tools = self._init_tools()
@@ -218,11 +221,23 @@ class DocumentAgent:
         """Initialize a Groq LLM with specified parameters."""
         try:
             from langchain_groq import ChatGroq
-            return ChatGroq(
+            
+            llm = ChatGroq(
                 model_name=model_name,
                 temperature=temperature,
-                groq_api_key=self.api_key
+                max_tokens=max_tokens,
+                api_key=self.api_key
             )
+            
+            # Test the model connection
+            try:
+                llm.invoke("Test connection")
+                logger.info(f"Successfully initialized Groq LLM with model: {model_name}")
+                return llm
+            except Exception as model_error:
+                logger.error(f"Error testing Groq model connection: {str(model_error)}")
+                raise
+                
         except Exception as e:
             logger.error(f"Error initializing Groq LLM: {str(e)}")
             raise
@@ -264,7 +279,10 @@ class DocumentAgent:
 
     def _init_agent(self) -> AgentExecutor:
         """Initialize the LangChain agent with enhanced capabilities."""
-        system_message = SystemMessage(content="""
+        from langchain.agents import AgentType
+        from langchain.agents import initialize_agent
+        
+        system_message = """
         You are an expert document formatting assistant with deep knowledge of Microsoft Word formatting.
         Your capabilities include:
         1. Comprehensive document structure analysis
@@ -281,29 +299,24 @@ class DocumentAgent:
         - Maintain document structure and hierarchy
         - Provide clear explanations of changes made
         - Handle errors gracefully and provide helpful feedback
-        """)
+        """
         
-        prompt = ChatPromptTemplate.from_messages([
-            system_message,
-            MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessage(content="{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-
-        agent = create_openai_functions_agent(
+        # Initialize agent with the structured tool chat type
+        agent = initialize_agent(
+            tools=self.tools,
             llm=self.primary_llm,
-            tools=self.tools,
-            prompt=prompt
-        )
-        
-        return AgentExecutor(
-            agent=agent,
-            tools=self.tools,
-            memory=self.memory,
+            agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5
+            max_iterations=5,
+            memory=self.memory,
+            agent_kwargs={
+                "system_message": system_message,
+                "input_variables": ["input", "chat_history", "agent_scratchpad"]
+            }
         )
+        
+        return agent
 
     @retry_on_rate_limit()
     def analyze_document(self, doc: Document) -> Dict[str, Any]:
@@ -327,16 +340,31 @@ class DocumentAgent:
                     'level': para._p.pPr.numPr.ilvl.val if para._p.pPr and para._p.pPr.numPr else None
                 })
             
-            # Use secondary LLM for quick analysis
-            analysis_chain = LLMChain(
-                llm=self.secondary_llm,
-                prompt=ChatPromptTemplate.from_messages([
-                    SystemMessage(content="Analyze the document structure and provide detailed insights about formatting, hierarchy, and content organization."),
-                    HumanMessage(content=str(structure))
-                ])
+            # Create analysis prompt
+            analysis_prompt = PromptTemplate(
+                input_variables=["structure"],
+                template="""
+                Analyze the following document structure and provide detailed insights about formatting, hierarchy, and content organization:
+                
+                {structure}
+                
+                Please provide a comprehensive analysis including:
+                1. Document structure overview
+                2. Formatting patterns
+                3. Content organization
+                4. Potential improvements
+                """
             )
             
-            analysis = analysis_chain.run(structure)
+            # Use secondary LLM for analysis
+            analysis_chain = LLMChain(
+                llm=self.secondary_llm,
+                prompt=analysis_prompt
+            )
+            
+            # Run analysis
+            analysis = analysis_chain.run(structure=str(structure))
+            
             return {
                 "status": "success",
                 "analysis": analysis,
@@ -388,7 +416,13 @@ class DocumentAgent:
                 """
             })
             
-            # Save processed document
+            # Apply formatting based on instructions
+            if "bold" in instructions.lower():
+                for paragraph in doc.paragraphs:
+                    for run in paragraph.runs:
+                        run.bold = True
+            
+            # Save processed document with a new name
             output_path = doc_path.replace('.docx', '_processed.docx')
             doc.save(output_path)
             

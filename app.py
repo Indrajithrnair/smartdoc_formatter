@@ -18,17 +18,20 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
+    # Initialize configuration
+    config_class.init_app(app)
+    
     # Initialize CORS
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["http://localhost:5000"],
-            "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
+            "origins": app.config['CORS_ORIGINS'],
+            "methods": app.config['CORS_METHODS'],
+            "allow_headers": app.config['CORS_ALLOWED_HEADERS']
         }
     })
     
     # Configure session
-    app.permanent_session_lifetime = timedelta(hours=1)
+    app.permanent_session_lifetime = app.config['PERMANENT_SESSION_LIFETIME']
     
     # Configure logging
     if not app.debug and not app.testing:
@@ -78,15 +81,17 @@ def create_app(config_class=Config):
 
     @app.before_request
     def before_request():
+        """Initialize session data."""
         session.permanent = True
         if not session.get('files'):
             session['files'] = []
 
     @app.after_request
     def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5000')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        """Add CORS headers to response."""
+        response.headers.add('Access-Control-Allow-Origin', app.config['CORS_ORIGINS'][0])
+        response.headers.add('Access-Control-Allow-Headers', ', '.join(app.config['CORS_ALLOWED_HEADERS']))
+        response.headers.add('Access-Control-Allow-Methods', ', '.join(app.config['CORS_METHODS']))
         return response
 
     @app.errorhandler(HTTPException)
@@ -119,4 +124,4 @@ def create_app(config_class=Config):
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True) 
+    app.run(debug=True, host='0.0.0.0', port=5000) 
